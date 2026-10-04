@@ -1,3 +1,4 @@
+#include <chrono>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -28,6 +29,8 @@ using utils::PointCloud2ToEigen;
 
 patchwork::Params GroundSegmentationServer::loadPlusplusParamsFromROS() {
   patchwork::Params params;
+  params.enable_adaptive_learning = declare_parameter<bool>(
+      "enable_adaptive_learning", params.enable_adaptive_learning);
 
   params.sensor_height = declare_parameter<double>("sensor_height", params.sensor_height);
   params.num_iter      = declare_parameter<int>("num_iter", params.num_iter);
@@ -91,6 +94,20 @@ patchwork::PatchworkParams GroundSegmentationServer::loadClassicParamsFromROS() 
 GroundSegmentationServer::GroundSegmentationServer(const rclcpp::NodeOptions &options)
     : rclcpp::Node("patchworkpp_node", options) {
   base_frame_ = declare_parameter<std::string>("base_frame", base_frame_);
+  last_surface_recheck_enabled_ = declare_parameter<bool>("ground_surface_recheck_enabled", false);
+  // The enable switch is read every frame and can be changed without restarting
+  // controls. Numeric settings require restart; reject misleading live changes.
+  rcl_interfaces::msg::ParameterDescriptor fixed;
+  fixed.read_only = true;
+  fixed.description = "Ground surface recheck geometry; restart node after changing YAML";
+  surface_recheck_.range = declare_parameter<double>("ground_surface_recheck_range", 5.0, fixed);
+  surface_recheck_.radius = declare_parameter<double>("ground_surface_recheck_radius", 1.0, fixed);
+  surface_recheck_.height = declare_parameter<double>("ground_surface_recheck_height", 0.02, fixed);
+  surface_recheck_.neighbors = declare_parameter<int>("ground_surface_recheck_neighbors", 5, fixed);
+  surface_recheck_.validate();
+  RCLCPP_INFO(get_logger(), "GROUND_SURFACE_RECHECK enabled=%s range=%.2f radius=%.2f height=%.3f neighbors=%d",
+      last_surface_recheck_enabled_ ? "true" : "false", surface_recheck_.range,
+      surface_recheck_.radius, surface_recheck_.height, surface_recheck_.neighbors);
 
   const std::string algorithm = declare_parameter<std::string>("algorithm", "patchworkpp");
 
@@ -105,9 +122,15 @@ GroundSegmentationServer::GroundSegmentationServer(const rclcpp::NodeOptions &op
   }
 
   // Initialize subscribers
+  // Select reliable delivery for large Odin clouds; keep SensorDataQoS as
+  // the default for publishers that only offer best-effort delivery.
+  auto input_qos = rclcpp::SensorDataQoS();
+  if (declare_parameter<bool>("input_reliable", false)) {
+    input_qos.reliable();
+  }
   pointcloud_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
       "pointcloud_topic",
-      rclcpp::SensorDataQoS(),
+      input_qos,
       std::bind(&GroundSegmentationServer::EstimateGround, this, std::placeholders::_1));
 
   /*
@@ -145,6 +168,17 @@ void GroundSegmentationServer::EstimateGround(
   Eigen::MatrixX3f nonground = std::visit([](auto &impl) { return impl->getNonground(); }, impl_);
   double time_taken          = std::visit([](auto &impl) { return impl->getTimeTaken(); }, impl_);
   (void)time_taken;  // available for debug logging if needed
+  const bool recheck = get_parameter("ground_surface_recheck_enabled").as_bool();
+  if (recheck != last_surface_recheck_enabled_) {
+    RCLCPP_INFO(get_logger(), "GROUND_SURFACE_RECHECK enabled=%s", recheck ? "true" : "false");
+    last_surface_recheck_enabled_ = recheck;
+  }
+  if (recheck) {
+    const auto before = std::chrono::steady_clock::now();
+    const size_t corrected = surface_recheck_.apply(ground, nonground);
+    const double ms = std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-before).count();
+    RCLCPP_DEBUG(get_logger(), "GROUND_SURFACE_RECHECK corrected=%zu processing_ms=%.3f", corrected, ms);
+  }
   PublishClouds(ground, nonground, msg->header);
 }
 

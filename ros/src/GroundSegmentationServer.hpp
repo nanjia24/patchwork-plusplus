@@ -2,6 +2,8 @@
 #include "patchwork/patchwork.h"
 #include "patchwork/patchworkpp.h"
 
+#include "GroundSurfaceRecheck.hpp"
+
 // Standard library
 #include <string>
 #include <variant>
@@ -45,6 +47,8 @@ class GroundSegmentationServer : public rclcpp::Node {
       std::variant<std::unique_ptr<patchwork::PatchWorkpp>, std::unique_ptr<patchwork::PatchWork>>;
   ImplVariant impl_;
 
+  bool last_surface_recheck_enabled_{false};
+  GroundSurfaceRecheck surface_recheck_;
   std::string base_frame_{"base_link"};
 };
 

@@ -52,3 +52,14 @@ install(TARGETS gseg_component LIBRARY DESTINATION lib RUNTIME DESTINATION lib/$
 install(DIRECTORY launch rviz DESTINATION share/${PROJECT_NAME}/)
 
 ament_package()
+
+if(BUILD_TESTING)
+  enable_testing()
+  add_executable(ground_surface_recheck_test test/ground_surface_recheck_test.cpp)
+  target_compile_features(ground_surface_recheck_test PRIVATE cxx_std_17)
+  target_link_libraries(ground_surface_recheck_test ${PARENT_PROJECT_NAME}::${TARGET_NAME})
+  add_test(NAME ground_surface_recheck COMMAND ground_surface_recheck_test)
+  add_executable(patchworkpp_no_history_test ../cpp/patchworkpp/tests/no_history_test.cpp)
+  target_link_libraries(patchworkpp_no_history_test ${PARENT_PROJECT_NAME}::${TARGET_NAME})
+  add_test(NAME patchworkpp_no_history COMMAND patchworkpp_no_history_test)
+endif()

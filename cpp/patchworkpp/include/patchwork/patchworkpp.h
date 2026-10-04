@@ -48,6 +48,7 @@ struct Params {
   bool enable_RNR;
   bool enable_RVPF;
   bool enable_TGR;
+  bool enable_adaptive_learning;  // Cross-frame elevation/flatness/height learning.
 
   int num_iter;
   int num_lpr;
@@ -83,6 +84,7 @@ struct Params {
     enable_RNR  = true;
     enable_RVPF = true;
     enable_TGR  = true;
+    enable_adaptive_learning = true;
 
     num_iter    = 3;   // Number of iterations for ground plane estimation using PCA.
     num_lpr     = 20;  // Maximum number of points to be selected as lowest points representative.

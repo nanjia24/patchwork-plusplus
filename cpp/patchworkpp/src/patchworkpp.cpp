@@ -270,8 +270,10 @@ void PatchWorkpp::estimateGround(Eigen::MatrixXf cloud_in) {
         }
 
         if (is_upright && is_not_elevated && is_near_zone) {
-          update_elevation_[concentric_idx].push_back(ground_elevation);
-          update_flatness_[concentric_idx].push_back(ground_flatness);
+          if (params_.enable_adaptive_learning) {
+            update_elevation_[concentric_idx].push_back(ground_elevation);
+            update_flatness_[concentric_idx].push_back(ground_flatness);
+          }
           ringwise_flatness.push_back(ground_flatness);
         }
 
@@ -322,8 +324,10 @@ void PatchWorkpp::estimateGround(Eigen::MatrixXf cloud_in) {
   }
 
   clock_t t_bef_update = clock();
-  update_elevation_thr();
-  update_flatness_thr();
+  if (params_.enable_adaptive_learning) {
+    update_elevation_thr();
+    update_flatness_thr();
+  }
   clock_t t_aft_update = clock();
 
   t_update = t_aft_update - t_bef_update;
